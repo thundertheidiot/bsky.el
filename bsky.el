@@ -11,6 +11,8 @@
 (require 'plz)
 (require 'dash)
 
+(require 'bsky-api)
+(require 'bsky-ui)
 
 
 ;;; bsky.el ends here

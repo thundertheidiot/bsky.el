@@ -48,6 +48,8 @@ ARGS are used as the query parameters, like in the example url."
   `("Authorization" . ,(format "Bearer %s"
 			       (alist-get 'accessJwt bsky-api--tokens))))
 
+;; TODO 2 factor auth
+;; https://docs.bsky.app/docs/api/com-atproto-server-create-session
 (defun bsky-authenticate (identifier &optional password)
   "Auhenticate with bluesky using IDENTIFIER (can be your email or handle) and PASSWORD."
   (interactive "sHandle: ")
