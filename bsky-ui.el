@@ -47,13 +47,14 @@
   (let ((buf (generate-new-buffer "*bluesky post*")))
     (with-current-buffer buf
       (org-mode)
+      (insert ":PROPERTIES:\n")
       (when properties
-	(insert ":PROPERTIES:\n")
 	(mapc (lambda (prop)
 		(insert (format ":%s: %s\n" (car prop) (cdr prop))))
-	      properties)
-	(insert ":END:\n"))
-      (insert "# Write your post below\n"))
+	      properties))
+      (insert ":END:\n")
+      (insert "# Write your post below\n")
+      (org--hide-drawers (point-min) (point-max)))
     (switch-to-buffer buf)))
 
 (defun bsky-ui--create-reply ()
