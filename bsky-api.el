@@ -171,5 +171,15 @@ Convenience wrapper around bsky-api--upload-blob."
       :headers `(("Authorization" . ,(format "Bearer %s" auth)))
       :as #'json-read)))
 
+(defun bsky-api--get-post-thread (uri &rest args)
+  (bsky-api--check-authentication)
+  (let ((depth (or (plist-get args :depth) nil))
+	(parent-height (or (plist-get args :parent-height) nil)))
+    (plz 'get (bsky-api--url "app.bsky.feed.getPostThread" nil
+			     (format "uri=%s" uri)
+			     (when depth (format "depth=%s" depth))
+			     (when parent-height (format "parentHeight=%s" parent-height)))
+      :headers `(,(bsky-helper--auth-header))
+      :as #'json-read)))
 
 ;;; bsky-api.el ends here

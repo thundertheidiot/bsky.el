@@ -29,10 +29,21 @@
 		      (insert (format ":root_cid: %s\n" (alist-get 'cid root)))
 		      ))
 	(insert ":END:\n\n")
-	(insert (format "*%s*\n\n" author-display-name))
+	(insert (format "*%s*\n\n" (or author-display-name author-handle)))
 
 	(insert (format "%s\n\n" text))
 	))))
+
+(defun bsky-ui--show-posts (posts)
+  "Create a new buffer and call post-to-element on each element of the POSTS vector."
+  (let ((buf (generate-new-buffer "*bluesky view*")))
+    (with-current-buffer buf
+      (org-mode)
+      (mapc (lambda (post)
+	      (bsky-ui--post-to-element post buf))
+	    posts)
+      (org--hide-drawers (point-min) (point-max)))
+    (switch-to-buffer buf)))
 
 (defun bsky-ui--element-to-post ()
   "Convert currently \"focused\" post to a post element that can be used as a post."
@@ -76,8 +87,7 @@
      `(parent_uri . ,parent_uri)
      `(parent_cid . ,parent_cid)
      `(root_uri . ,root_uri)
-     `(root_cid . ,root_cid))
-    ))
+     `(root_cid . ,root_cid))))
 
 (defun bsky-ui--post-buffer-parse-links (lines)
   "Parse urls and images from the list of LINES."
