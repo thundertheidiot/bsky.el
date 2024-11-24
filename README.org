@@ -49,3 +49,18 @@ The function =(bsky-api--search)= can be used to search for posts, check the fun
 Make some kind minor mode to lightly enforce only posting in post buffers
 Add a character count to the info bar?
 
+** Plans?
+
+Posts and their replies should be represented as org headings
+
+#+begin_src emacs-lisp
+ * post
+ ** post
+ ** post
+ ** post
+ * post
+#+end_src
+
+This should allow for easy collapsing of posts. I am not sure about how I would represent different reply chains, ideally I would just create custom ui for everything but I kind of like the idea of just relying on org-mode.
+
+The heading name being post is definitely a placeholder, maybe I should put the author name there?
