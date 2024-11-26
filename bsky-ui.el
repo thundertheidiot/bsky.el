@@ -1,3 +1,4 @@
+;; -*- lexical-binding: t; -*-
 (require 'dash)
 
 (defun bsky-ui--post-to-element (post &optional buf)
