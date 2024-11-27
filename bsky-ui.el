@@ -1,6 +1,9 @@
 ;; -*- lexical-binding: t; -*-
 (require 'dash)
 
+(defvar bsky-use-all-the-icons nil 
+  "Should bsky.el use all-the-icons in the post renderer.")
+
 (defun bsky-ui--post-to-element (post &optional header-level buf)
   "Create a visual representation of a POST element in buffer BUF returned from bluesky."
   (let ((author (alist-get 'author post))
@@ -13,6 +16,10 @@
 	  (author-display-name (alist-get 'displayName author))
 	  (text (alist-get 'text record))
 	  (reply (alist-get 'reply record))
+	  (reply-count (alist-get 'replyCount post))
+	  (repost-count (alist-get 'repostCount post))
+	  (like-count (alist-get 'likeCount post))
+	  (quote-count (alist-get 'quoteCount post))
 	  )
       (with-current-buffer buf
 	(insert (format "*%s %s\n"
@@ -36,6 +43,18 @@
 	(insert ":END:\n\n")
 
 	(insert (format "%s\n\n" text))
+
+	(if bsky-use-all-the-icons
+	    (progn
+	      (insert (format "%s %s " (all-the-icons-faicon "reply" :face 'all-the-icons-blue) reply-count))
+	      (insert (format "%s %s " (all-the-icons-faicon "recycle" :face 'all-the-icons-blue) repost-count))
+	      (insert (format "%s %s " (all-the-icons-faicon "heart" :face 'all-the-icons-red) like-count))
+	      (insert (format "%s %s\n\n" (all-the-icons-faicon "quote-right" :face 'all-the-icons-blue) quote-count)))
+	  (progn
+	    (insert (format "REPLIES: %s " reply-count))
+	    (insert (format "REPOSTS: %s " repost-count))
+	    (insert (format "LIKES: %s " like-count))
+	    (insert (format "QUOTES: %s\n\n" quote-count))))
 	))))
 
 (defun bsky-ui--show-posts (posts &optional header-level buf)
