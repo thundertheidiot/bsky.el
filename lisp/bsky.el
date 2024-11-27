@@ -9,9 +9,6 @@
 ;; A client for the Bluesky social network implemented in Emacs Lisp.
 
 ;;; Code:
-(require 'plz)
-(require 'dash)
-
 (require 'bsky-api)
 (require 'bsky-ui)
 

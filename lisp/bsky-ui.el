@@ -60,8 +60,7 @@
 	    (insert (format "REPLIES: %s " reply-count))
 	    (insert (format "REPOSTS: %s " repost-count))
 	    (insert (format "LIKES: %s " like-count))
-	    (insert (format "QUOTES: %s\n\n" quote-count))))
-	))))
+	    (insert (format "QUOTES: %s\n\n" quote-count))))))))
 
 (defun bsky-ui--show-posts (posts &optional header-level buf)
   "Call post-to-element on each element of the POSTS list/vector in the buffer BUF.
@@ -100,7 +99,7 @@ HEADER-LEVEL represents the reply depth of the post."
 
 (defun bsky-view-post-thread (&optional from-here depth)
   "View the thread of the current post.
-If FROM-HERE is set, fetch only this reply thread, not the thread of the root post.
+If FROM-HERE is set, fetch only this reply thread instead of the root post.
 DEPTH specifies the chain depth."
   (interactive)
   (bsky-api--check-authentication)
@@ -112,11 +111,20 @@ DEPTH specifies the chain depth."
     (bsky-ui--show-posts (bsky-api--get-post-thread uri
 						    :depth (or depth 100)))))
 
-(defun bsky-ui--create-post-buffer (&rest properties)
-  "Create a buffer to post."
+(define-minor-mode bsky-post-mode
+  "Minor mode that must be enabled for you to post to bluesky.
+This should help prevent mistakes."
+  :global nil
+  :interactive nil
+  :lighter " Bluesky")
+
+(defun bsky-create-post (&rest properties)
+  "Create a buffer to post.  Add PROPERTIES to the org property drawer."
+  (interactive)
   (let ((buf (generate-new-buffer "*bluesky post*")))
     (with-current-buffer buf
       (org-mode)
+      (bsky-post-mode)
       (insert ":PROPERTIES:\n")
       (when properties
 	(mapc (lambda (prop)
@@ -127,8 +135,9 @@ DEPTH specifies the chain depth."
       (org--hide-drawers (point-min) (point-max)))
     (switch-to-buffer buf)))
 
-(defun bsky-ui--create-reply ()
+(defun bsky-reply-to-current-post ()
   "Create post buffer for replying to a post."
+  (interactive)
   (let ((reply (org-entry-get nil "reply"))
 	(parent_uri (org-entry-get nil "uri"))
 	(parent_cid (org-entry-get nil "cid"))
@@ -141,7 +150,7 @@ DEPTH specifies the chain depth."
       (progn
 	(setq root_uri (org-entry-get nil "uri"))
 	(setq root_cid (org-entry-get nil "cid"))))
-    (bsky-ui--create-post-buffer
+    (bsky-create-post
      '(reply . t)
      `(parent_uri . ,parent_uri)
      `(parent_cid . ,parent_cid)
@@ -164,65 +173,67 @@ DEPTH specifies the chain depth."
 	  (nreverse images)
 	  (nreverse link-embeds))))
 
-(defun bsky-ui--post-bsky-post-buffer ()
-  (let* ((content (buffer-substring-no-properties (point-min) (point-max)))
-	 (lines (s-lines content))
-	 ;; remove everything before the first appearance of :END:
-	 (lines (apply #'append (cdr (-split-on ":END:" lines))))
-	 (content (-filter (lambda (line)
-			     (not (string-prefix-p "#" line)))
-			   lines))
-	 (processed (bsky-ui--post-buffer-parse-links content))
-	 (text (mapconcat 'identity (nth 0 processed) "\n"))
-	 (images (nth 1 processed))
-	 (link-embeds (nth 2 processed)))
-    (let ((record nil))
-      (when (org-entry-get nil "reply")
-	(let ((root-uri (org-entry-get nil "root_uri"))
-	      (root-cid (org-entry-get nil "root_cid"))
-	      (parent-uri (org-entry-get nil "parent_uri"))
-	      (parent-cid (org-entry-get nil "parent_cid")))
-	  (setq record `((reply . ((root . ((uri . ,root-uri)
-					    (cid . ,root-cid)))
-				   (parent . ((uri . ,parent-uri)
-					      (cid . ,parent-cid)))))))))
-      (cond
-       (images
-	(when (> 4 (length images))
-	  (warn "Bluesky only supports up to four images per post, only the first four will be used.")
-	  (setq images (-take 4 images)))
-	(setq record (append record `((embed . (($type . "app.bsky.embed.images")
-						(images . ,(mapcar (lambda (image)
-								     `((alt . "")
-								       (image . ,(alist-get 'blob
-											    (bsky-api--upload-file image)))))
-								   images))))))))
-       (link-embeds
-	(when (> 1 (length link-embeds))
-	  (warn "Bluesky only supports one link embed, only the first one will be used."))
-	(let* ((link (nth 0 link-embeds))
-	       (uri (nth 0 link))
-	       ;; Title:::Description
-	       ;; Both Title and Description at the same time
-	       (split (split-string (nth 1 link) ":::"))
-	       (description (or (cadr split) (nth 1 link)))
-	       (title (car split)))
-	  (setq sillyness `(,description ,title))
-	  (setq record (append record `((embed . (($type . "app.bsky.embed.external")
-						  (external . ((uri . ,uri)
-							       (title . ,title)
-							       (description . ,description)))))))))
-	)
-       )
-      ;; TODO handle errors
-      (let ((response (bsky-api--post text record)))
-	(let ((uri (alist-get 'uri response))
-	      (cid (alist-get 'cid response)))
-	  (org-set-property "uri" uri)
-	  (org-set-property "cid" cid)))
-      )
-    )
-  )
+(defun bsky-post-current-post (&optional override-post-mode)
+  "Post the current post buffer, replies are also post buffers.
+OVERRIDE-POST-MODE overrides the post mode check."
+  (interactive)
+  (unless bsky-post-mode
+    (warn "This is not a bluesky post buffer, if you really want to post this buffer, pass a non nil value as the first argument."))
+  (when (and (or override-post-mode bsky-post-mode) (y-or-n-p "Are you sure you want to post this? "))
+    (let* ((content (buffer-substring-no-properties (point-min) (point-max)))
+	   (lines (s-lines content))
+	   ;; remove everything before the first appearance of :END:
+	   (lines (apply #'append (cdr (-split-on ":END:" lines))))
+	   (content (-filter (lambda (line)
+			       (not (string-prefix-p "#" line)))
+			     lines))
+	   (processed (bsky-ui--post-buffer-parse-links content))
+	   (text (mapconcat 'identity (nth 0 processed) "\n"))
+	   (images (nth 1 processed))
+	   (link-embeds (nth 2 processed)))
+      (let ((record nil))
+	(when (org-entry-get nil "reply")
+	  (let ((root-uri (org-entry-get nil "root_uri"))
+		(root-cid (org-entry-get nil "root_cid"))
+		(parent-uri (org-entry-get nil "parent_uri"))
+		(parent-cid (org-entry-get nil "parent_cid")))
+	    (setq record `((reply . ((root . ((uri . ,root-uri)
+					      (cid . ,root-cid)))
+				     (parent . ((uri . ,parent-uri)
+						(cid . ,parent-cid)))))))))
+	(cond
+	 (images
+	  (when (> 4 (length images))
+	    (warn "Bluesky only supports up to four images per post, only the first four will be used.")
+	    (setq images (-take 4 images)))
+	  (setq record (append record `((embed . (($type . "app.bsky.embed.images")
+						  (images . ,(mapcar (lambda (image)
+								       `((alt . "")
+									 (image . ,(alist-get 'blob
+											      (bsky-api--upload-file image)))))
+								     images))))))))
+	 (link-embeds
+	  (when (> 1 (length link-embeds))
+	    (warn "Bluesky only supports one link embed, only the first one will be used."))
+	  (let* ((link (nth 0 link-embeds))
+		 (uri (nth 0 link))
+		 ;; Title:::Description
+		 ;; Both Title and Description at the same time
+		 (split (split-string (nth 1 link) ":::"))
+		 (description (or (cadr split) (nth 1 link)))
+		 (title (car split)))
+	    (setq sillyness `(,description ,title))
+	    (setq record (append record `((embed . (($type . "app.bsky.embed.external")
+						    (external . ((uri . ,uri)
+								 (title . ,title)
+								 (description . ,description)))))))))))
+	;; TODO handle errors
+	(bsky-post-mode -1)
+	(let ((response (bsky-api--post text record)))
+	  (let ((uri (alist-get 'uri response))
+		(cid (alist-get 'cid response)))
+	    (org-set-property "uri" uri)
+	    (org-set-property "cid" cid)))))))
 
 (provide 'bsky-ui)
 ;;; bsky-ui.el ends here
