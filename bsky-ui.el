@@ -71,8 +71,21 @@ HEADER-LEVEL represents the reply depth of the post."
   `((uri . ,(org-entry-get nil "uri"))
     (cid . ,(org-entry-get nil "cid"))
     (author . ((did . ,(org-entry-get nil "author_did"))
-	       (handle . ,(org-entry-get nil "author_handle"))))
-    ))
+	       (handle . ,(org-entry-get nil "author_handle"))))))
+
+(defun bsky-view-post-thread (&optional from-here depth)
+  "View the thread of the current post.
+If FROM-HERE is set, fetch only this reply thread, not the thread of the root post.
+DEPTH specifies the chain depth."
+  (interactive)
+  (bsky-api--check-authentication)
+  (let ((uri (if from-here
+		 (org-entry-get nil "uri")
+	       (or (org-entry-get nil "root_uri")
+		   (org-entry-get nil "uri")))))
+    ;; TODO make this async
+    (bsky-ui--show-posts (bsky-api--get-post-thread uri
+						    :depth (or depth 100)))))
 
 (defun bsky-ui--create-post-buffer (&rest properties)
   "Create a buffer to post."
