@@ -4,6 +4,8 @@ WIP bluesky client for Emacs
 
 ** Terrible usage instructions
 
+Currently out of date, won't update today
+
 *** Setup 
 1. Evaluate all the buffers because this isn't even a functional package yet
 2. Log in using =(bsky-authenticate)=
