@@ -1,11 +1,12 @@
 ;;; bsky.el --- Bluesky client inside Emacs -*- lexical-binding: t; -*-
 
 ;; Author: Thunder <thunder@disroot.org>
-;; Keywords: bluesky
 ;; Version 0.1
+;; Package-Requires ((plz "0.9") (dash "2.19.1"))
+;; Keywords: bluesky
 
 ;;; Commentary:
-;; Bluesky client in Emacs
+;; A client for the Bluesky social network implemented in Emacs Lisp.
 
 ;;; Code:
 (require 'plz)
@@ -14,5 +15,5 @@
 (require 'bsky-api)
 (require 'bsky-ui)
 
-
+(provide 'bsky)
 ;;; bsky.el ends here

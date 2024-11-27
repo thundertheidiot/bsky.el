@@ -1,7 +1,13 @@
-;; -*- lexical-binding: t; -*-
+;;; bsky-ui.el --- UI Module for bsky.el -*- lexical-binding: t; -*-
+;; Author: Thunder <thunder@disroot.org>
+
+;;; Commentary:
+;; bsky.el leverages org-mode features for its user interface
+
+;;; Code:
 (require 'dash)
 
-(defvar bsky-use-all-the-icons nil 
+(defvar bsky-use-all-the-icons nil
   "Should bsky.el use all-the-icons in the post renderer.")
 
 (defun bsky-ui--post-to-element (post &optional header-level buf)
@@ -71,7 +77,7 @@ HEADER-LEVEL represents the reply depth of the post."
 	(bsky-ui--post-to-element (alist-get 'post posts))
 	(bsky-ui--show-posts (alist-get 'replies posts) (+ header-level 1) buf))
        ;; list of posts e.g. search
-       ;; TODO make actual condition
+       ;; TODO make actual condition (or (listp) (vectorp))?
        (t
 	(mapc (lambda (post)
 		(cond
@@ -217,3 +223,6 @@ DEPTH specifies the chain depth."
       )
     )
   )
+
+(provide 'bsky-ui)
+;;; bsky-ui.el ends here

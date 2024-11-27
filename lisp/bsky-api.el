@@ -1,4 +1,9 @@
-;; -*- lexical-binding: t; -*-
+;;; bsky-api.el --- Backend API Module for bsky.el -*- lexical-binding: t; -*-
+;; Author: Thunder <thunder@disroot.org>
+
+;;; Commentary:
+;; This module contains the backend code for interfacing with bluesky.
+;; It mainly consists of GET and POST requests to the server, made using plz.el here.
 (require 'dash)
 (require 'plz)
 
@@ -20,6 +25,7 @@ ARGS are used as the query parameters, like in the example url."
       base-url)))
 
 (defmacro bsky-api--error-handler (&rest handlers)
+  "Macro to help with creating error handlers, see the function `bsky-api--base-errors' for an example on using HANDLERS."
   `(lambda (err)
      (let ((curl-err (plz-error-curl-error err))
 	   (response (plz-error-response err)))
@@ -34,6 +40,7 @@ ARGS are used as the query parameters, like in the example url."
 	 (signal 'plz-curl-error (list "Curl error" curl-err))))))
 
 (defun bsky-api--base-errors ()
+  "Basic error handler sufficient for most API calls."
   (bsky-api--error-handler
    (401 . (let ((response (json-read-from-string body)))
 	    (message (format "401 Unauthorized (%s): %s" (alist-get 'error response) (alist-get 'message response)))))
@@ -41,11 +48,12 @@ ARGS are used as the query parameters, like in the example url."
 	    (message (format "400 Bad Request (%s): %s" (alist-get 'error response) (alist-get 'message response)))))))
 
 (defun bsky-api--check-authentication ()
-  "Check that the user is authenticated."
+  "Check that the user is authenticated, prompt for authentication if not."
   (unless bsky-api--tokens
-    (error "You have not authenticated with bluesky")))
+    (bsky-authenticate)))
 
-(defun bsky-helper--auth-header ()
+(defun bsky-api--auth-header ()
+  "Return the authentication header that is passed on with every request to bluesky."
   `("Authorization" . ,(format "Bearer %s"
 			       (alist-get 'accessJwt bsky-api--tokens))))
 
@@ -53,7 +61,7 @@ ARGS are used as the query parameters, like in the example url."
 ;; https://docs.bsky.app/docs/api/com-atproto-server-create-session
 (defun bsky-authenticate (identifier &optional password)
   "Auhenticate with bluesky using IDENTIFIER (can be your email or handle) and PASSWORD."
-  (interactive "sHandle: ")
+  (interactive "sHandle/Email: ")
   (let* ((password (or password
 		       (read-passwd "Password: " '())))
 	 (body (json-encode `((identifier . ,identifier)
@@ -64,7 +72,7 @@ ARGS are used as the query parameters, like in the example url."
       :as #'json-read
       :then (lambda (response)
 	      (setq bsky-api--tokens response)
-	      (message (format "Successfully authenticated with bluesky as %s" identifier)))
+	      (message (format "Successfully authenticated with bluesky as %s" (alist-get 'handle response))))
       :else (bsky-api--base-errors))))
 
 (defun bsky-refresh-authentication ()
@@ -73,7 +81,7 @@ ARGS are used as the query parameters, like in the example url."
   (let ((refresh-token (alist-get 'refreshJwt bsky-api--tokens)))
     (plz 'post (bsky-api--url "com.atproto.server.refreshSession")
       :headers `(("Content-Type" . "application/json")
-		 ("Authorization" . ,(format "Bearer %s" refresh-token)))
+		 ,(bsky-api--auth-header))
       :as #'json-read
       :then (lambda (response)
 	      (setq bsky-api--tokens response))
@@ -101,7 +109,7 @@ Append EXTRA-RECORD-CONTENT to the record data."
 			      (record . ,post)))))
     (plz 'post (bsky-api--url "com.atproto.repo.createRecord")
       :headers `(("Content-Type" . "application/json")
-		 ("Authorization" . ,(format "Bearer %s" auth)))
+		 ,(bsky-api--auth-header))
       :as #'json-read
       :body body
       :else (bsky-api--base-errors))))
@@ -126,7 +134,7 @@ ROOT is the first post of the thread."
   "Upload BLOB with MIME-TYPE to the bluesky server."
   (bsky-api--check-authentication)
   (plz 'post (bsky-api--url "com.atproto.repo.uploadBlob")
-    :headers `(,(bsky-helper--auth-header)
+    :headers `(,(bsky-api--auth-header)
 	       ("Content-Type" . ,mime-type))
     :body-type 'binary
     :body blob
@@ -171,7 +179,7 @@ Convenience wrapper around bsky-api--upload-blob."
 			     (if tag (format "tag=%s" tag) nil)
 			     (if limit (format "limit=%s" limit) nil)
 			     (if cursor (format "cursor=%s" cursor) nil))
-      :headers `(("Authorization" . ,(format "Bearer %s" auth)))
+      :headers `(,(bsky-api--auth-header))
       :as #'json-read)))
 
 (defun bsky-api--get-post-thread (uri &rest args)
@@ -182,7 +190,8 @@ Convenience wrapper around bsky-api--upload-blob."
 			     (format "uri=%s" uri)
 			     (when depth (format "depth=%s" depth))
 			     (when parent-height (format "parentHeight=%s" parent-height)))
-      :headers `(,(bsky-helper--auth-header))
+      :headers `(,(bsky-api--auth-header))
       :as #'json-read)))
 
+(provide 'bsky-api)
 ;;; bsky-api.el ends here
