@@ -1,7 +1,7 @@
 ;; -*- lexical-binding: t; -*-
 (require 'dash)
 
-(defun bsky-ui--post-to-element (post &optional buf)
+(defun bsky-ui--post-to-element (post &optional header-level buf)
   "Create a visual representation of a POST element in buffer BUF returned from bluesky."
   (let ((author (alist-get 'author post))
 	(record (alist-get 'record post)))
@@ -15,7 +15,11 @@
 	  (reply (alist-get 'reply record))
 	  )
       (with-current-buffer buf
-	(insert "* post\n")
+	(insert (format "*%s %s\n"
+			(make-string
+			 (or header-level 0)
+			 ?*)
+			(or author-display-name author-handle)))
 	(insert ":PROPERTIES:\n")
 	(insert (format ":uri: %s\n" uri))
 	(insert (format ":cid: %s\n" cid))
@@ -30,19 +34,35 @@
 		      (insert (format ":root_cid: %s\n" (alist-get 'cid root)))
 		      ))
 	(insert ":END:\n\n")
-	(insert (format "*%s*\n\n" (or author-display-name author-handle)))
 
 	(insert (format "%s\n\n" text))
 	))))
 
-(defun bsky-ui--show-posts (posts)
-  "Create a new buffer and call post-to-element on each element of the POSTS vector."
-  (let ((buf (generate-new-buffer "*bluesky view*")))
+(defun bsky-ui--show-posts (posts &optional header-level buf)
+  "Call post-to-element on each element of the POSTS list/vector in the buffer BUF.
+A new buffer is created if BUF is nil.
+HEADER-LEVEL represents the reply depth of the post."
+  (let ((buf (or buf (generate-new-buffer "*bluesky view*")))
+	(header-level (or header-level 0)))
     (with-current-buffer buf
       (org-mode)
-      (mapc (lambda (post)
-	      (bsky-ui--post-to-element post buf))
-	    posts)
+      (cond
+       ;; reply thread
+       ((string= (ignore-errors (alist-get '$type posts)) "app.bsky.feed.defs#threadViewPost")
+	(bsky-ui--post-to-element (alist-get 'post posts))
+	(bsky-ui--show-posts (alist-get 'replies posts) (+ header-level 1) buf))
+       ;; list of posts e.g. search
+       ;; TODO make actual condition
+       (t
+	(mapc (lambda (post)
+		(cond
+		 ((alist-get '$type post)
+		  (let ((innerpost (alist-get 'post post)))
+		    (bsky-ui--post-to-element innerpost header-level buf)
+		    (bsky-ui--show-posts (alist-get 'replies post) (+ header-level 1) buf)))
+		 (t
+		  (bsky-ui--post-to-element post header-level buf))))
+	      posts)))
       (org--hide-drawers (point-min) (point-max)))
     (switch-to-buffer buf)))
 
