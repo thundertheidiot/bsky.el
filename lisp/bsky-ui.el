@@ -50,6 +50,8 @@
 
 	(insert (format "%s\n\n" text))
 
+	;; TODO links, images, quotes etc.
+
 	(if bsky-use-all-the-icons
 	    (progn
 	      (insert (format "%s %s " (all-the-icons-faicon "reply" :face 'all-the-icons-blue) reply-count))

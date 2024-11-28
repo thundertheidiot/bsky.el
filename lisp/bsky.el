@@ -12,5 +12,11 @@
 (require 'bsky-api)
 (require 'bsky-ui)
 
+(defun bsky-search ()
+  "Search bluesky."
+  (interactive)
+  (let ((term (completing-read "Search for: " '())))
+    (bsky-ui--show-posts (cdar (bsky-api--search term)))))
+
 (provide 'bsky)
 ;;; bsky.el ends here

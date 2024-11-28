@@ -142,6 +142,22 @@ ROOT is the first post of the thread."
     :as #'json-read
     :else (bsky-api--base-errors)))
 
+(defun bsky-api--get-blob (then did cid)
+  "Get blob from the bluesky server, DID is the author did, CID is the blob cid."
+  (plz 'get (bsky-api--url "com.atproto.sync.getBlob" nil
+			   (format "did=%s" did)
+			   (format "cid=%s" cid))
+    :headers `(,(bsky-api--auth-header))
+    :as 'binary
+    :then then))
+
+(defun bsky-api--insert-image-blob (did cid &optional scale)
+  "Insert retrieved blob as image"
+  (bsky-api--get-blob
+   (lambda (data) (interactive)
+     (insert-image (create-image data nil t :scale 0.5)))
+   did cid))
+
 (defun bsky-api--upload-file (file)
   "Upload FILE contents with the FILE mime-type to the bluesky server.
 Convenience wrapper around bsky-api--upload-blob."
