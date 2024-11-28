@@ -6,6 +6,7 @@
 ;; It mainly consists of GET and POST requests to the server, made using plz.el here.
 (require 'dash)
 (require 'plz)
+(require 'url-util)
 
 ;;; Code:
 (defcustom bsky-server "https://bsky.social"
@@ -167,7 +168,9 @@ Convenience wrapper around bsky-api--upload-blob."
 	(limit (or (plist-get args :limit) nil))
 	(cursor (or (plist-get args :cursor) nil)))
     (plz 'get (bsky-api--url "app.bsky.feed.searchPosts" nil
-			     (format "q=%s" term)
+			     ;; TODO url hexify all needed ones
+			     ;; For example limit cannot be hexified
+			     (format "q=%s" (url-hexify-string term))
 			     (if sort (format "sort=%s" sort) nil)
 			     (if since (format "since=%s" since) nil)
 			     (if until (format "until=%s" until) nil)

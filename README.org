@@ -4,8 +4,6 @@ WIP bluesky client for Emacs
 
 ** Terrible usage instructions
 
-Currently out of date, won't update today
-
 *** Setup 
 1. Evaluate all the buffers because this isn't even a functional package yet
 2. Log in using =(bsky-authenticate)=
@@ -14,9 +12,9 @@ When your access token expires, you can use =(bsky-refresh-authentication)= to r
 
 *** Posting
 
-The function =(bsky-ui--create-post-buffer)= will create a new buffer for your post, write your text below the comment.
+The function =(bsky-create-post)= will create a new buffer for your post, write your text below the comment.
 
-Calling =(bsky-ui--post-bsky-post-buffer)= while in the buffer will make a post to bluesky.
+Calling =(bsky-post-current-post)= while in the buffer will make a post to bluesky.
 
 Up to four images linked through org file links (\[[file\:file.png]\]) or the first org http(s) link embedded in the post, in that order. Only either images or the link can be embedded.
 
@@ -36,11 +34,15 @@ Quote posts also don't exist yet.
 
 **** Reply
 
-Calling =(bsky-ui--create-reply)= in an org element with the uri and cid attributes set correctly should generate a post buffer, that has attributes for a parent and root post.
+Calling =(bsky-reply-to-current-post)= in an org element with the uri and cid attributes set correctly should generate a post buffer, that has attributes for a parent and root post.
 
 Posting this buffer should make a reply, embeds work as usual.
 
-** Viewing posts
+*** Viewing posts
+
+The function =(bsky-view-post-thread)= fetches shows you the thread of the current post.
+
+**** Searching (still manual)
 
 The function =(bsky-ui--show-posts)= creates org elements for a list of posts.
 
@@ -48,21 +50,9 @@ The function =(bsky-api--search)= can be used to search for posts, check the fun
 
 ** TODOs
 
-Make some kind minor mode to lightly enforce only posting in post buffers
-Add a character count to the info bar?
-
-** Plans?
-
-Posts and their replies should be represented as org headings
-
-#+begin_src emacs-lisp
- * post
- ** post
- ** post
- ** post
- * post
-#+end_src
-
-This should allow for easy collapsing of posts. I am not sure about how I would represent different reply chains, ideally I would just create custom ui for everything but I kind of like the idea of just relying on org-mode.
-
-The heading name being post is definitely a placeholder, maybe I should put the author name there?
+- [ ] Interface for searching (completing-read something?)
+- [ ] Character count for post mode
+- [ ] Post long texts as a thread somehow?
+- [ ] View user profile and posts
+- [ ] Notifications
+- [ ] Timer for refresh auth
