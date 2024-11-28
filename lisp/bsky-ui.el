@@ -28,11 +28,11 @@
 	  (quote-count (alist-get 'quoteCount post))
 	  )
       (with-current-buffer buf
-	(insert (format "*%s %s\n"
+	(insert (format "%s %s\n"
 			(make-string
-			 (or header-level 0)
+			 (or header-level 1)
 			 ?*)
-			(or author-display-name author-handle)))
+			(or (format "%s <@%s>" author-display-name author-handle) author-handle)))
 	(insert ":PROPERTIES:\n")
 	(insert (format ":uri: %s\n" uri))
 	(insert (format ":cid: %s\n" cid))
@@ -52,24 +52,40 @@
 
 	;; TODO links, images, quotes etc.
 
-	(if bsky-use-all-the-icons
+	(let ((embed (alist-get 'embed record)))
+	  (when embed
+	    (cond
+	     ((string= (alist-get '$type embed) "app.bsky.embed.images")
+	      (mapc (lambda (img)
+		      (bsky-api--insert-blob-as-image (alist-get 'did author) (alist-get '$link (alist-get 'ref (alist-get 'image img))) (point) buf (alist-get 'alt img)))
+		    (alist-get 'images embed)))
+	     ((string= (alist-get '$type embed) "app.bsky.embed.record") ;; quote post
+	      (let ((uri (alist-get 'uri (alist-get 'record embed))))
+		(insert (make-string 20 ?=)
+			"\n")
+		(bsky-ui--post-to-element (elt (cdar (bsky-api--get-posts uri)) 0) 0)
+		(insert (make-string 20 ?=)
+			"\n")))))
+
+	  (if bsky-use-all-the-icons
+	      (progn
+		(insert (format "%s %s " (all-the-icons-faicon "reply" :face 'all-the-icons-blue) reply-count))
+		(insert (format "%s %s " (all-the-icons-faicon "recycle" :face 'all-the-icons-blue) repost-count))
+		(insert (format "%s %s " (all-the-icons-faicon "heart" :face 'all-the-icons-red) like-count))
+		(insert (format "%s %s\n\n" (all-the-icons-faicon "quote-right" :face 'all-the-icons-blue) quote-count)))
 	    (progn
-	      (insert (format "%s %s " (all-the-icons-faicon "reply" :face 'all-the-icons-blue) reply-count))
-	      (insert (format "%s %s " (all-the-icons-faicon "recycle" :face 'all-the-icons-blue) repost-count))
-	      (insert (format "%s %s " (all-the-icons-faicon "heart" :face 'all-the-icons-red) like-count))
-	      (insert (format "%s %s\n\n" (all-the-icons-faicon "quote-right" :face 'all-the-icons-blue) quote-count)))
-	  (progn
-	    (insert (format "REPLIES: %s " reply-count))
-	    (insert (format "REPOSTS: %s " repost-count))
-	    (insert (format "LIKES: %s " like-count))
-	    (insert (format "QUOTES: %s\n\n" quote-count))))))))
+	      (insert (format "REPLIES: %s " reply-count))
+	      (insert (format "REPOSTS: %s " repost-count))
+	      (insert (format "LIKES: %s " like-count))
+	      (insert (format "QUOTES: %s\n\n" quote-count)))))
+	))))
 
 (defun bsky-ui--show-posts (posts &optional header-level buf)
   "Call post-to-element on each element of the POSTS list/vector in the buffer BUF.
 A new buffer is created if BUF is nil.
 HEADER-LEVEL represents the reply depth of the post."
   (let ((buf (or buf (generate-new-buffer "*bluesky view*")))
-	(header-level (or header-level 0)))
+	(header-level (or header-level 1)))
     (with-current-buffer buf
       (org-mode)
       (cond
@@ -205,7 +221,7 @@ OVERRIDE-POST-MODE overrides the post mode check."
 						(cid . ,parent-cid)))))))))
 	(cond
 	 (images
-	  (when (> 4 (length images))
+	  (when (> (length images) 4)
 	    (warn "Bluesky only supports up to four images per post, only the first four will be used.")
 	    (setq images (-take 4 images)))
 	  (setq record (append record `((embed . (($type . "app.bsky.embed.images")

@@ -14,6 +14,11 @@
 (defvar bsky-api--tokens nil
   "Bluesky authentication data returned by the server.")
 
+;; TODO create this when accessed
+(defvar bsky-image-cache-dir (expand-file-name "bsky-cache" user-emacs-directory)
+  "Directory to store cached images in.")
+
+;; Query parameter arrays accepted in the form array=elem1&array=elem2
 (defun bsky-api--url (endpoint &optional server &rest args)
   "Helper function to generate urls for api calls to bluesky.
 Outputs a url like https://bsky.social/xrpc/ENDPOINT?arg_one=1&arg_two=2.
@@ -142,21 +147,25 @@ ROOT is the first post of the thread."
     :as #'json-read
     :else (bsky-api--base-errors)))
 
-(defun bsky-api--get-blob (then did cid)
-  "Get blob from the bluesky server, DID is the author did, CID is the blob cid."
-  (plz 'get (bsky-api--url "com.atproto.sync.getBlob" nil
-			   (format "did=%s" did)
-			   (format "cid=%s" cid))
-    :headers `(,(bsky-api--auth-header))
-    :as 'binary
-    :then then))
-
-(defun bsky-api--insert-image-blob (did cid &optional scale)
-  "Insert retrieved blob as image"
-  (bsky-api--get-blob
-   (lambda (data) (interactive)
-     (insert-image (create-image data nil t :scale 0.5)))
-   did cid))
+(defun bsky-api--insert-blob-as-image (did cid point buf &optional alt scale)
+  ;; TODO Display alt text
+  "Insert blob with DID and CID as an image in the buffer BUF at POINT.
+Optionally scale image to SCALE, by default this is 0.5."
+  (let ((filename (expand-file-name (format "%s_%s.png" did cid) ;; TODO filename from mime type
+				    bsky-image-cache-dir)))
+    (if (file-regular-p filename)
+	(insert (format "[[file:%s]]\n\n" filename alt))
+      (plz 'get (bsky-api--url "com.atproto.sync.getBlob" nil
+			       (format "did=%s" did)
+			       (format "cid=%s" cid))
+	:headers `(,(bsky-api--auth-header))
+	:as `(file ,filename)
+	:then `(lambda (data)
+		 (with-current-buffer ,buf
+		   (save-excursion
+		     (goto-char ,point)
+		     (insert (format "[[file:%s]]\n\n" ,filename)))))
+	:else (bsky-api--base-errors)))))
 
 (defun bsky-api--upload-file (file)
   "Upload FILE contents with the FILE mime-type to the bluesky server.
@@ -166,7 +175,6 @@ Convenience wrapper around bsky-api--upload-blob."
 		(buffer-substring-no-properties (point-min) (point-max))))
 	(mime-type (mailcap-file-name-to-mime-type file)))
     (bsky-api--upload-blob blob mime-type)))
-
 
 (defun bsky-api--search (term &rest args)
   "Search for TERM, extra params in ARGS."
@@ -198,6 +206,16 @@ Convenience wrapper around bsky-api--upload-blob."
 			     (if tag (format "tag=%s" tag) nil)
 			     (if limit (format "limit=%s" limit) nil)
 			     (if cursor (format "cursor=%s" cursor) nil))
+      :headers `(,(bsky-api--auth-header))
+      :as #'json-read)))
+
+(defun bsky-api--get-posts (&rest uris)
+  (bsky-api--check-authentication)
+  (when (> (length uris) 0)
+    (plz 'get (apply #'bsky-api--url "app.bsky.feed.getPosts" nil
+		     (mapcar (lambda (uri)
+			       (format "uris=%s" uri))
+			     uris))
       :headers `(,(bsky-api--auth-header))
       :as #'json-read)))
 
