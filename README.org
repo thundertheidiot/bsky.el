@@ -56,3 +56,10 @@ The function =(bsky-api--search)= can be used to search for posts, check the fun
 - [ ] View user profile and posts
 - [ ] Notifications
 - [ ] Timer for refresh auth
+- Embeds
+  - [X] Images
+  - [-] Quote
+  - [ ] Links 
+- Rich text
+  - [ ] bsky -> org
+  - [ ] org -> bsky

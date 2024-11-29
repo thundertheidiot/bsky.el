@@ -10,10 +10,25 @@
 (defvar bsky-use-all-the-icons nil
   "Should bsky.el use all-the-icons in the post renderer.")
 
+(defun bsky-ui--format-post-stats (like reply repost quote)
+  "Insert LIKE, REPLY, REPOST and QUOTE counts."
+  (if bsky-use-all-the-icons
+      (concat
+       (format "%s %s " (all-the-icons-faicon "reply" :face 'all-the-icons-blue) reply)
+       (format "%s %s " (all-the-icons-faicon "recycle" :face 'all-the-icons-blue) repost)
+       (format "%s %s " (all-the-icons-faicon "heart" :face 'all-the-icons-red) like)
+       (format "%s %s\n" (all-the-icons-faicon "quote-right" :face 'all-the-icons-blue) quote))
+    (concat
+     (format "REPLIES: %s " reply)
+     (format "REPOSTS: %s " repost)
+     (format "LIKES: %s " like)
+     (format "QUOTES: %s\n" quote))))
+
 (defun bsky-ui--post-to-element (post &optional header-level buf)
   "Create a visual representation of a POST element in buffer BUF returned from bluesky."
   (let ((author (alist-get 'author post))
-	(record (alist-get 'record post)))
+	(record (alist-get 'record post))
+	(post-embed (ignore-errors (alist-get 'embed post))))
     (let ((buf (or buf (current-buffer)))
 	  (uri (alist-get 'uri post))
 	  (cid (alist-get 'cid post))
@@ -26,59 +41,63 @@
 	  (repost-count (alist-get 'repostCount post))
 	  (like-count (alist-get 'likeCount post))
 	  (quote-count (alist-get 'quoteCount post))
-	  )
+	  (embed (alist-get 'embed record))
+	  (quote (string= (ignore-errors (alist-get '$type record-embed)) "app.bsky.embed.record")))
       (with-current-buffer buf
-	(insert (format "%s %s\n"
-			(make-string
-			 (or header-level 1)
-			 ?*)
-			(or (format "%s <@%s>" author-display-name author-handle) author-handle)))
-	(insert ":PROPERTIES:\n")
-	(insert (format ":uri: %s\n" uri))
-	(insert (format ":cid: %s\n" cid))
-	(insert (format ":author_did: %s\n" author-did))
-	(insert (format ":author_handle: %s\n" author-handle))
+	(insert
+	 ;; Header
+	 (format "%s %s\n"
+		 (make-string
+		  (or header-level 1)
+		  ?*)
+		 (or (format "%s <@%s>" author-display-name author-handle) author-handle))
+	 ":PROPERTIES:\n"
+	 (format ":uri: %s\n" uri)
+	 (format ":cid: %s\n" cid)
+	 (format ":author_did: %s\n" author-did)
+	 (format ":author_handle: %s\n" author-handle))
 	(when reply (let ((parent (alist-get 'parent reply))
 			  (root (alist-get 'root reply)))
-		      (insert (format ":reply: t\n"))
-		      (insert (format ":parent_uri: %s\n" (alist-get 'uri parent)))
-		      (insert (format ":parent_cid: %s\n" (alist-get 'cid parent)))
-		      (insert (format ":root_uri: %s\n" (alist-get 'uri root)))
-		      (insert (format ":root_cid: %s\n" (alist-get 'cid root)))
-		      ))
-	(insert ":END:\n\n")
+		      (insert (format ":reply: t\n")
+			      (format ":parent_uri: %s\n" (alist-get 'uri parent))
+			      (format ":parent_cid: %s\n" (alist-get 'cid parent))
+			      (format ":root_uri: %s\n" (alist-get 'uri root))
+			      (format ":root_cid: %s\n" (alist-get 'cid root)))))
+	(when quote (let ((quote-uri (alist-get 'uri (alist-get 'record embed))))
+		      (insert
+		       (format ":quote_uri: %s\n" quote-uri))))
+	(insert ":END:\n\n"
+		(format "%s\n\n" text))
 
-	(insert (format "%s\n\n" text))
+	;; TODO links 
 
-	;; TODO links, images, quotes etc.
+	(when embed
+	  (cond
+	   ;; TODO the order is not enforced
+	   ((string= (alist-get '$type embed) "app.bsky.embed.images")
+	    (mapc (lambda (img)
+		    (bsky-api--insert-blob-as-image (alist-get 'did author) (alist-get '$link (alist-get 'ref (alist-get 'image img))) (point) buf (alist-get 'alt img)))
+		  (alist-get 'images embed)))
+	   ((string= (alist-get '$type embed) "app.bsky.embed.record") ;; quote post
+	    ;; TODO embeds in quoted post?
+	    (let* ((post (alist-get 'record post-embed))
+		   (author (alist-get 'author post)))
+	      (insert (format "#+begin_quote %s\n" (if (alist-get 'displayName author)
+						       (format "%s <@%s>"
+							       (alist-get 'displayName author)
+							       (alist-get 'handle author))
+						     (format "@%s" (alist-get 'handle author))))
+		      (alist-get 'text (alist-get 'value post))
+		      "\n"
+		      (bsky-ui--format-post-stats
+		       (alist-get 'likeCount post)
+		       (alist-get 'replyCount post)
+		       (alist-get 'repostCount post)
+		       (alist-get 'quoteCount post))
+		      "#+end_quote\n\n")))))
 
-	(let ((embed (alist-get 'embed record)))
-	  (when embed
-	    (cond
-	     ((string= (alist-get '$type embed) "app.bsky.embed.images")
-	      (mapc (lambda (img)
-		      (bsky-api--insert-blob-as-image (alist-get 'did author) (alist-get '$link (alist-get 'ref (alist-get 'image img))) (point) buf (alist-get 'alt img)))
-		    (alist-get 'images embed)))
-	     ((string= (alist-get '$type embed) "app.bsky.embed.record") ;; quote post
-	      (let ((uri (alist-get 'uri (alist-get 'record embed))))
-		(insert (make-string 20 ?=)
-			"\n")
-		(bsky-ui--post-to-element (elt (cdar (bsky-api--get-posts uri)) 0) 0)
-		(insert (make-string 20 ?=)
-			"\n")))))
-
-	  (if bsky-use-all-the-icons
-	      (progn
-		(insert (format "%s %s " (all-the-icons-faicon "reply" :face 'all-the-icons-blue) reply-count))
-		(insert (format "%s %s " (all-the-icons-faicon "recycle" :face 'all-the-icons-blue) repost-count))
-		(insert (format "%s %s " (all-the-icons-faicon "heart" :face 'all-the-icons-red) like-count))
-		(insert (format "%s %s\n\n" (all-the-icons-faicon "quote-right" :face 'all-the-icons-blue) quote-count)))
-	    (progn
-	      (insert (format "REPLIES: %s " reply-count))
-	      (insert (format "REPOSTS: %s " repost-count))
-	      (insert (format "LIKES: %s " like-count))
-	      (insert (format "QUOTES: %s\n\n" quote-count)))))
-	))))
+	(insert (bsky-ui--format-post-stats like-count reply-count repost-count quote-count)
+		"\n")))))
 
 (defun bsky-ui--show-posts (posts &optional header-level buf)
   "Call post-to-element on each element of the POSTS list/vector in the buffer BUF.
