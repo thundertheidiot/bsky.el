@@ -26,6 +26,7 @@
 
 (defun bsky-ui--post-to-element (post &optional header-level buf)
   "Create a visual representation of a POST element in buffer BUF returned from bluesky."
+  (set-buffer-file-coding-system 'utf-8) ;; https://docs.bsky.app/docs/advanced-guides/post-richtext
   (let ((author (alist-get 'author post))
 	(record (alist-get 'record post))
 	(post-embed (ignore-errors (alist-get 'embed post))))
@@ -158,6 +159,7 @@ This should help prevent mistakes."
 (defun bsky-create-post (&rest properties)
   "Create a buffer to post.  Add PROPERTIES to the org property drawer."
   (interactive)
+  (set-buffer-file-coding-system 'utf-8) ;; https://docs.bsky.app/docs/advanced-guides/post-richtext
   (let ((buf (generate-new-buffer "*bluesky post*")))
     (with-current-buffer buf
       (org-mode)
@@ -194,6 +196,9 @@ This should help prevent mistakes."
      `(root_uri . ,root_uri)
      `(root_cid . ,root_cid))))
 
+;; TODO rich text creator and parser
+;; TODO convert org link to rich text, not link embed
+;; TODO come up with link system
 (defun bsky-ui--post-buffer-parse-links (lines)
   "Parse urls and images from the list of LINES."
   (let ((processed-lines '())
