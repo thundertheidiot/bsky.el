@@ -230,5 +230,11 @@ Convenience wrapper around bsky-api--upload-blob."
       :headers `(,(bsky-api--auth-header))
       :as #'json-read)))
 
+(defun bsky-api--get-profile (actor)
+  (plz 'get (bsky-api--url "app.bsky.actor.getProfile" nil
+			   (format "actor=%s" actor))
+    :headers `(,(bsky-api--auth-header))
+    :as #'json-read))
+
 (provide 'bsky-api)
 ;;; bsky-api.el ends here

@@ -196,43 +196,125 @@ This should help prevent mistakes."
      `(root_uri . ,root_uri)
      `(root_cid . ,root_cid))))
 
-;; TODO rich text creator and parser
-;; TODO convert org link to rich text, not link embed
-;; TODO come up with link system
-(defun bsky-ui--post-buffer-parse-links (lines)
-  "Parse urls and images from the list of LINES."
-  (let ((processed-lines '())
+(defun bsky-ui--text-parser (content)
+  (let ((content content)
 	(images '())
-	(link-embeds '()))
-    (dolist (line lines)
-      (cond
-       ((string-match "\\[\\[file:\\(.+\\)\\]\\]" line)
-	(push (match-string 1 line) images))
-       ((string-match "\\[\\[\\(http[|s]://.+\\)\\]\\[\\(.+\\)\\]\\]" line)
-	(push `(,(match-string 1 line) ,(match-string 2 line)) link-embeds))
-       (t (push line processed-lines))))
-    (list (nreverse processed-lines)
-	  (nreverse images)
-	  (nreverse link-embeds))))
+	(rich-text '())
 
-(defun bsky-post-current-post (&optional override-post-mode)
-  "Post the current post buffer, replies are also post buffers.
-OVERRIDE-POST-MODE overrides the post mode check."
+	(image-regex (rx
+		      "[["
+		      "file:"
+		      (group-n 1 ;; filename
+			(+? nonl))
+		      "]"
+		      (or
+		       "]"
+		       (and
+			"["
+			(group-n 2 ;; alt text
+			  (+? nonl))
+			"]]"))))
+
+	(tag-regex (rx
+		    (not (any "\\"))
+		    "#"
+		    (group-n 1
+		      (+? nonl))
+		    (or space line-end)))
+
+	(mention-regex (rx
+			(not (any "\\"))
+			"@"
+			(group-n 1
+			  (+? nonl))
+			(or space line-end)))
+
+	(url-regex (rx
+		    "[["
+		    (group-n 1 ;; link
+		      "http"
+		      (opt "s")
+		      "://"
+		      (+? nonl))
+		    "]"
+		    (or
+		     "]"
+		     (and
+		      "["
+		      (group-n 2 ;; text
+			(+? nonl))
+		      "]]")))))
+
+    (while (string-match image-regex content)
+      (push (list (match-string 1 content) (match-string 2 content))
+	    images)
+      (setq content (concat
+		     (substring content 0 (match-beginning 0))
+		     (substring content (match-end 0)))))
+
+    (while (string-match url-regex content)
+      (let* ((url (match-string 1 content))
+	     (description (or (match-string 2 content) url)))
+	(setq content (concat
+		       (substring content 0 (match-beginning 0))
+		       description
+		       (substring content (match-end 0))))
+	(push `((index . ((byteStart . ,(match-beginning 0))
+			  (byteEnd . ,(+ (match-beginning 0) (length description)))))
+		;; features: [{}]
+		(features . ((($type . "app.bsky.richtext.facet#link")
+			      (uri . ,url)))))
+	      rich-text)))
+
+    (setq bskydebug content)
+
+    (let ((start 0))
+      (while (string-match tag-regex content start)
+	(push `((index . ((byteStart . ,(- (match-beginning 1) 1))
+			  (byteEnd . ,(match-end 1))))
+		(features . ((($type . "app.bsky.richtext.facet#tag")
+			      (tag . ,(match-string 1 content))))))
+	      rich-text)
+	(setq start (match-end 1))))
+
+    (let ((start 0))
+      (while (string-match mention-regex content start)
+	(push `((index . ((byteStart . ,(- (match-beginning 1) 1))
+			  (byteEnd . ,(match-end 1))))
+		(features . ((($type . "app.bsky.richtext.facet#mention")
+			      ;; TODO be smart here
+			      (did . ,(alist-get 'did (bsky-api--get-profile (match-string 1 content))))))))
+	      rich-text)
+	(setq start (match-end 1))))
+
+    ;; TODO figure out link embed
+
+    (list
+     content
+     (nreverse images)
+     (nreverse rich-text))))
+
+(defun bsky-post-current-post (&optional override)
+  "Post the currently focused buffer, this function is also used for replies.
+OVERRIDE will override the check for a valid post buffer."
   (interactive)
-  (unless bsky-post-mode
-    (warn "This is not a bluesky post buffer, if you really want to post this buffer, pass a non nil value as the first argument."))
-  (when (and (or override-post-mode bsky-post-mode) (y-or-n-p "Are you sure you want to post this? "))
+  (unless (or override bsky-post-mode)
+    (warn "This is not a bluesky post buffer."))
+  (when (and (or override bsky-post-mode) (y-or-n-p "Are you sure you want to post this? "))
     (let* ((content (buffer-substring-no-properties (point-min) (point-max)))
 	   (lines (s-lines content))
-	   ;; remove everything before the first appearance of :END:
+	   ;; do some parsing to remove unnecessary lines
 	   (lines (apply #'append (cdr (-split-on ":END:" lines))))
-	   (content (-filter (lambda (line)
-			       (not (string-prefix-p "#" line)))
-			     lines))
-	   (processed (bsky-ui--post-buffer-parse-links content))
-	   (text (mapconcat 'identity (nth 0 processed) "\n"))
+	   (lines (-filter (lambda (line)
+			     (not (or
+				   (string-prefix-p "# " line)
+				   (string-prefix-p "#+" line))))
+			   lines))
+	   (content (mapconcat #'identity lines "\n"))
+	   (processed (bsky-ui--text-parser content))
+	   (text (car processed))
 	   (images (nth 1 processed))
-	   (link-embeds (nth 2 processed)))
+	   (rich-text (nth 2 processed)))
       (let ((record nil))
 	(when (org-entry-get nil "reply")
 	  (let ((root-uri (org-entry-get nil "root_uri"))
@@ -243,33 +325,23 @@ OVERRIDE-POST-MODE overrides the post mode check."
 					      (cid . ,root-cid)))
 				     (parent . ((uri . ,parent-uri)
 						(cid . ,parent-cid)))))))))
-	(cond
-	 (images
-	  (when (> (length images) 4)
-	    (warn "Bluesky only supports up to four images per post, only the first four will be used.")
+	(when images
+	  (when (< 4 (length images))
+	    (warn "Bluesky only supports embedding up to four images per post, only the first four will be used.")
 	    (setq images (-take 4 images)))
-	  (setq record (append record `((embed . (($type . "app.bsky.embed.images")
-						  (images . ,(mapcar (lambda (image)
-								       `((alt . "")
-									 (image . ,(alist-get 'blob
-											      (bsky-api--upload-file image)))))
-								     images))))))))
-	 (link-embeds
-	  (when (> 1 (length link-embeds))
-	    (warn "Bluesky only supports one link embed, only the first one will be used."))
-	  (let* ((link (nth 0 link-embeds))
-		 (uri (nth 0 link))
-		 ;; Title:::Description
-		 ;; Both Title and Description at the same time
-		 (split (split-string (nth 1 link) ":::"))
-		 (description (or (cadr split) (nth 1 link)))
-		 (title (car split)))
-	    (setq sillyness `(,description ,title))
-	    (setq record (append record `((embed . (($type . "app.bsky.embed.external")
-						    (external . ((uri . ,uri)
-								 (title . ,title)
-								 (description . ,description)))))))))))
-	;; TODO handle errors
+	  (setq images `((embed . (($type . "app.bsky.embed.images")
+				   (images . ,(mapcar (lambda (image)
+							;; TODO alt (cdr image)
+							`((alt . "")
+							  (image . ,(alist-get 'blob
+									       (bsky-api--upload-file (car image))))))
+						      images)))))))
+
+	(when rich-text
+	  (setq rich-text `((facets . ,rich-text))))
+
+	(setq record (append record images rich-text))
+
 	(bsky-post-mode -1)
 	(let ((response (bsky-api--post text record)))
 	  (let ((uri (alist-get 'uri response))

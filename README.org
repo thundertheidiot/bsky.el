@@ -4,6 +4,8 @@ WIP bluesky client for Emacs
 
 ** Terrible usage instructions
 
+Out of date
+
 *** Setup 
 1. Evaluate all the buffers because this isn't even a functional package yet
 2. Log in using =(bsky-authenticate)=
@@ -50,16 +52,27 @@ The function =(bsky-api--search)= can be used to search for posts, check the fun
 
 ** TODOs
 
-- [ ] Interface for searching (completing-read something?)
+- [-] Interface for searching (completing-read something?)
+      (bsky-search)
 - [ ] Character count for post mode
 - [ ] Post long texts as a thread somehow?
 - [ ] View user profile and posts
 - [ ] Notifications
 - [ ] Timer for refresh auth
-- Embeds
-  - [X] Images
-  - [-] Quote
-  - [ ] Links 
-- Rich text
-  - [ ] bsky -> org
-  - [ ] org -> bsky
+
+- Post to buffer
+  - Embed
+    - [X] Images
+    - [X] Quote 
+    - [ ] Link
+  - [ ] Links
+
+- Buffer to post
+  - Embed
+    - [X] Image
+    - [ ] Link (no idea how this should be represented)
+    - [ ] Quote
+  - [X] Links
+  - [X] Hashtags
+  - [X] Mentions 
+
