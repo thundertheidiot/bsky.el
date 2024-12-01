@@ -236,5 +236,37 @@ Convenience wrapper around bsky-api--upload-blob."
     :headers `(,(bsky-api--auth-header))
     :as #'json-read))
 
+(defmacro bsky-api--make-api (&rest args)
+  (let ((endpoint (plist-get args :endpoint))
+	(request (or (plist-get args :request) ''get))
+	(headers (plist-get args :headers))
+
+	(params (eval (plist-get args :params)))
+
+	(noauth (plist-get args :noauth))
+
+	(then (plist-get args :then))
+	(else (plist-get args :else))
+	(finally (plist-get args :finally)))
+    (let ((async-plist `(,@(when then `(:then ,then :else
+					      ,(or else '(bsky-api--base-errors))))
+			 ,@(when finally `(:finally ,finally)))))
+      `(defun ,(intern (format "bsky-api%s:%s" (if then "-async" "") endpoint)) (&rest args)
+	 (let ,(mapcar (lambda (param)
+			 `(,(car param) (or (plist-get args ,(intern (format ":%s" (car param)))) ,(cdr param))))
+		       params)
+	   ,@`(,(unless noauth '(bsky-api--check-authentication)))
+	   (plz ,request (apply #'bsky-api--url ,endpoint ,(when noauth "https://public.api.bsky.app")
+				,(when (eq (eval request) 'get)
+				   (mapcar (lambda (param)
+					     `(format ,(concat (format "%s" (car param)) "=%s") ,(car param)))
+					   params)))
+	     :headers ,(append
+			'`(,(bsky-api--auth-header))
+			headers)
+	     :as #'json-read
+	     ,@async-plist
+	     ))))))
+
 (provide 'bsky-api)
 ;;; bsky-api.el ends here
